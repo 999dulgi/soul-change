@@ -71,18 +71,23 @@ public class PatchCharacterSwapOnFloor
         RotateField(players, "<MaxAscensionWhenRunStarted>k__BackingField");
         RotateField(players, "_canRemovePotions");
 
-        // Post-swap: resub UI to new creature/deck, refresh displays
-        foreach (var node in playerStateNodes)
+        // Post-swap: defer heavy scene-tree rebuilds so StartSync isn't blocked
+        var capturedRunState = runState;
+        var capturedTopBar = topBar;
+        var capturedNodes = playerStateNodes;
+        Godot.Callable.From(() =>
         {
-            var healthBar = Traverse.Create(node).Field("_healthBar").GetValue();
-            if (healthBar != null)
-                Traverse.Create(healthBar).Field("_creature").SetValue(null);
-            node._Ready();
-        }
-        RefreshRelicInventory(runState);
-
-        if (topBar != null)
-            RefreshTopBar(topBar, runState);
+            foreach (var node in capturedNodes)
+            {
+                var healthBar = Traverse.Create(node).Field("_healthBar").GetValue();
+                if (healthBar != null)
+                    Traverse.Create(healthBar).Field("_creature").SetValue(null);
+                node._Ready();
+            }
+            RefreshRelicInventory(capturedRunState);
+            if (capturedTopBar != null)
+                RefreshTopBar(capturedTopBar, capturedRunState);
+        }).CallDeferred();
 
         Log($"[SoulChange] SWAP DONE. After: " +
             string.Join(", ", players.Select((p, i) => $"[{i}]NetId={p.NetId} Char={p.Character?.Id}")));
@@ -111,13 +116,13 @@ public class PatchCharacterSwapOnFloor
     {
         var holders = Traverse.Create(container).Field("_holders").GetValue() as IList;
         if (holders == null) return;
-        foreach (var holder in holders)
+
+        var toRemove = holders.Cast<Godot.Node>().ToList();
+        holders.Clear();
+        foreach (var holder in toRemove)
         {
-            var t = Traverse.Create(holder);
-            var potion = t.Field("<Potion>k__BackingField").GetValue() as Godot.Node;
-            if (potion == null) continue;
-            t.Field("<Potion>k__BackingField").SetValue(null);
-            potion.QueueFree();
+            holder.GetParent()?.RemoveChild(holder);
+            holder.QueueFree();
         }
     }
 
