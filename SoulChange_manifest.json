@@ -3,7 +3,7 @@
   "name": "Soul Change",
   "author": "999dulgi",
   "description": "A multiplayer mod for Slay the Spire 2 that swaps every player's character, deck, relics, and full run state at the start of each floor.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "has_pck": false,
   "has_dll": true,
   "affects_gameplay": true
