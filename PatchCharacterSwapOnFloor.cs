@@ -5,35 +5,73 @@ using System.Linq;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Players;
-using MegaCrit.Sts2.Core.Multiplayer;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.Multiplayer;
+using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 
 namespace SoulChange;
 
-[HarmonyPatch(typeof(CombatStateSynchronizer), "StartSync")]
+[HarmonyPatch(typeof(AbstractRoom), nameof(AbstractRoom.Enter))]
 public class PatchCharacterSwapOnFloor
 {
     private static int _lastSwapFloor = -1;
+    private static int _rotationOffset = 0;
+    private static int _triggerCount = 0; // 트리거 방 통과 횟수
 
-    static void Prefix(CombatStateSynchronizer __instance)
+    static void Prefix(AbstractRoom __instance, IRunState runState, bool isRestoringRoomStackBase)
     {
-        var runState = Traverse.Create(__instance).Field("_runState").GetValue<RunState>();
-        if (runState == null || runState.Players.Count < 2) return;
+        if (runState is not RunState state || isRestoringRoomStackBase) return;
+        if (state.Players.Count < 2) return;
 
-        int currentFloor = runState.ActFloor;
+        bool isBoss = SoulChangeConfig.RestoreOnBoss && __instance.RoomType == RoomType.Boss;
+        bool isTrigger = SoulChangeConfig.TriggerRooms.Contains(__instance.RoomType);
+        if (!isBoss && !isTrigger) return;
+
+        int currentFloor = state.ActFloor;
         if (currentFloor == _lastSwapFloor) return;
+
+        if (currentFloor < _lastSwapFloor)
+        {
+            _rotationOffset = 0;
+            _triggerCount = 0;
+        }
+
         _lastSwapFloor = currentFloor;
 
-        var players = Traverse.Create(runState).Field("_players").GetValue<List<Player>>();
-        if (players == null || players.Count < 2) return;
+        var players = state.Players.ToList();
+        int playerCount = players.Count;
 
-        Log($"[SoulChange] Floor {currentFloor}: SWAP START. Before: " +
+        int rotateBy;
+        if (isBoss)
+        {
+            rotateBy = (playerCount - _rotationOffset) % playerCount;
+            _rotationOffset = 0;
+            _triggerCount = 0;
+        }
+        else
+        {
+            _triggerCount++;
+            if (_triggerCount < SoulChangeConfig.SwapEveryNFloors)
+            {
+                Log($"[SoulChange] Floor {currentFloor} ({__instance.RoomType}): 트리거 {_triggerCount}/{SoulChangeConfig.SwapEveryNFloors}, 아직 스왑 안 함.");
+                return;
+            }
+            _triggerCount = 0;
+            rotateBy = 1;
+            _rotationOffset = (_rotationOffset + 1) % playerCount;
+        }
+
+        if (rotateBy == 0)
+        {
+            Log($"[SoulChange] Floor {currentFloor} (BOSS): 이미 원래 정렬 상태, 스왑 없음.");
+            return;
+        }
+
+        Log($"[SoulChange] Floor {currentFloor} ({(isBoss ? "BOSS→원복" : $"SWAP/{__instance.RoomType}")}): rotateBy={rotateBy}. Before: " +
             string.Join(", ", players.Select((p, i) => $"[{i}]NetId={p.NetId} Char={p.Character?.Id}")));
 
-        // Pre-swap: unsub UI nodes from old creature/deck while old references are still valid
         var playerStateNodes = GetPlayerStateNodes();
         foreach (var node in playerStateNodes)
             node._ExitTree();
@@ -46,7 +84,32 @@ public class PatchCharacterSwapOnFloor
             topBar.Deck._ExitTree();
         }
 
-        // --- Field swap ---
+        for (int r = 0; r < rotateBy; r++)
+            DoRotateAllFields(players);
+
+        var capturedRunState = state;
+        var capturedTopBar = topBar;
+        var capturedNodes = playerStateNodes;
+        Godot.Callable.From(() =>
+        {
+            foreach (var node in capturedNodes)
+            {
+                var healthBar = Traverse.Create(node).Field("_healthBar").GetValue();
+                if (healthBar != null)
+                    Traverse.Create(healthBar).Field("_creature").SetValue(null);
+                node._Ready();
+            }
+            RefreshRelicInventory(capturedRunState);
+            if (capturedTopBar != null)
+                RefreshTopBar(capturedTopBar, capturedRunState);
+        }).CallDeferred();
+
+        Log($"[SoulChange] DONE. After: " +
+            string.Join(", ", players.Select((p, i) => $"[{i}]NetId={p.NetId} Char={p.Character?.Id}")));
+    }
+
+    private static void DoRotateAllFields(IReadOnlyList<Player> players)
+    {
         RotateField(players, "<Character>k__BackingField");
         RotateField(players, "<Creature>k__BackingField");
         RebindCreaturePlayers(players);
@@ -71,27 +134,6 @@ public class PatchCharacterSwapOnFloor
         RotatePublic(players, p => p.DiscoveredEpochs, (p, v) => p.DiscoveredEpochs = v);
         RotateField(players, "<MaxAscensionWhenRunStarted>k__BackingField");
         RotateField(players, "_canRemovePotions");
-
-        // Post-swap: defer heavy scene-tree rebuilds so StartSync isn't blocked
-        var capturedRunState = runState;
-        var capturedTopBar = topBar;
-        var capturedNodes = playerStateNodes;
-        Godot.Callable.From(() =>
-        {
-            foreach (var node in capturedNodes)
-            {
-                var healthBar = Traverse.Create(node).Field("_healthBar").GetValue();
-                if (healthBar != null)
-                    Traverse.Create(healthBar).Field("_creature").SetValue(null);
-                node._Ready();
-            }
-            RefreshRelicInventory(capturedRunState);
-            if (capturedTopBar != null)
-                RefreshTopBar(capturedTopBar, capturedRunState);
-        }).CallDeferred();
-
-        Log($"[SoulChange] SWAP DONE. After: " +
-            string.Join(", ", players.Select((p, i) => $"[{i}]NetId={p.NetId} Char={p.Character?.Id}")));
     }
 
     private static void RefreshTopBar(NTopBar topBar, RunState runState)
@@ -99,7 +141,6 @@ public class PatchCharacterSwapOnFloor
         var player = LocalContext.GetMe(runState);
         if (player == null) return;
 
-        // Portrait: remove old icon child, add new one
         for (int i = topBar.Portrait.GetChildCount() - 1; i >= 0; i--)
             topBar.Portrait.RemoveChild(topBar.Portrait.GetChild(i));
         topBar.Portrait.Initialize(player);
@@ -108,7 +149,6 @@ public class PatchCharacterSwapOnFloor
         topBar.Gold.Initialize(player);
         topBar.Deck.Initialize(player);
 
-        // PotionContainer: clear existing potion visuals before re-init
         ClearPotionHolders(topBar.PotionContainer);
         topBar.PotionContainer.Initialize(runState);
     }
@@ -163,7 +203,7 @@ public class PatchCharacterSwapOnFloor
 
     private static void Log(string msg) => Godot.GD.Print(msg);
 
-    private static void RotateField(List<Player> players, string field)
+    private static void RotateField(IReadOnlyList<Player> players, string field)
     {
         var traversals = players.Select(p => Traverse.Create(p).Field(field)).ToList();
         var saved = traversals[0].GetValue();
@@ -172,7 +212,7 @@ public class PatchCharacterSwapOnFloor
         traversals[^1].SetValue(saved);
     }
 
-    private static void RotatePublic<T>(List<Player> players, Func<Player, T> getter, Action<Player, T> setter)
+    private static void RotatePublic<T>(IReadOnlyList<Player> players, Func<Player, T> getter, Action<Player, T> setter)
     {
         var values = players.Select(getter).ToList();
         var saved = values[0];
@@ -181,13 +221,13 @@ public class PatchCharacterSwapOnFloor
         setter(players[^1], saved);
     }
 
-    private static void ResetRunPiles(List<Player> players)
+    private static void ResetRunPiles(IReadOnlyList<Player> players)
     {
         foreach (var player in players)
             Traverse.Create(player).Field("_runPiles").SetValue(null);
     }
 
-    private static void RebindCreaturePlayers(List<Player> players)
+    private static void RebindCreaturePlayers(IReadOnlyList<Player> players)
     {
         foreach (var player in players)
         {
@@ -197,7 +237,7 @@ public class PatchCharacterSwapOnFloor
         }
     }
 
-    private static void RebindCardOwners(List<Player> players)
+    private static void RebindCardOwners(IReadOnlyList<Player> players)
     {
         foreach (var player in players)
         {
@@ -210,7 +250,7 @@ public class PatchCharacterSwapOnFloor
         }
     }
 
-    private static void RebindRelicOwners(List<Player> players)
+    private static void RebindRelicOwners(IReadOnlyList<Player> players)
     {
         foreach (var player in players)
         {
@@ -221,7 +261,7 @@ public class PatchCharacterSwapOnFloor
         }
     }
 
-    private static void RebindPotionOwners(List<Player> players)
+    private static void RebindPotionOwners(IReadOnlyList<Player> players)
     {
         foreach (var player in players)
         {
