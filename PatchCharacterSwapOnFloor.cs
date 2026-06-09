@@ -3,9 +3,11 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using HarmonyLib;
+using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Multiplayer;
 using MegaCrit.Sts2.Core.Nodes;
+using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.Multiplayer;
 using MegaCrit.Sts2.Core.Runs;
 
@@ -31,10 +33,20 @@ public class PatchCharacterSwapOnFloor
         Log($"[SoulChange] Floor {currentFloor}: SWAP START. Before: " +
             string.Join(", ", players.Select((p, i) => $"[{i}]NetId={p.NetId} Char={p.Character?.Id}")));
 
+        // Pre-swap: unsub UI nodes from old creature/deck while old references are still valid
         var playerStateNodes = GetPlayerStateNodes();
         foreach (var node in playerStateNodes)
             node._ExitTree();
 
+        var topBar = NRun.Instance?.GlobalUi?.TopBar;
+        if (topBar != null)
+        {
+            topBar.Hp._ExitTree();
+            topBar.Gold._ExitTree();
+            topBar.Deck._ExitTree();
+        }
+
+        // --- Field swap ---
         RotateField(players, "<Character>k__BackingField");
         RotateField(players, "<Creature>k__BackingField");
         RebindCreaturePlayers(players);
@@ -59,6 +71,7 @@ public class PatchCharacterSwapOnFloor
         RotateField(players, "<MaxAscensionWhenRunStarted>k__BackingField");
         RotateField(players, "_canRemovePotions");
 
+        // Post-swap: resub UI to new creature/deck, refresh displays
         foreach (var node in playerStateNodes)
         {
             var healthBar = Traverse.Create(node).Field("_healthBar").GetValue();
@@ -68,8 +81,44 @@ public class PatchCharacterSwapOnFloor
         }
         RefreshRelicInventory(runState);
 
+        if (topBar != null)
+            RefreshTopBar(topBar, runState);
+
         Log($"[SoulChange] SWAP DONE. After: " +
             string.Join(", ", players.Select((p, i) => $"[{i}]NetId={p.NetId} Char={p.Character?.Id}")));
+    }
+
+    private static void RefreshTopBar(NTopBar topBar, RunState runState)
+    {
+        var player = LocalContext.GetMe(runState);
+        if (player == null) return;
+
+        // Portrait: remove old icon child, add new one
+        for (int i = topBar.Portrait.GetChildCount() - 1; i >= 0; i--)
+            topBar.Portrait.RemoveChild(topBar.Portrait.GetChild(i));
+        topBar.Portrait.Initialize(player);
+
+        topBar.Hp.Initialize(player);
+        topBar.Gold.Initialize(player);
+        topBar.Deck.Initialize(player);
+
+        // PotionContainer: clear existing potion visuals before re-init
+        ClearPotionHolders(topBar.PotionContainer);
+        topBar.PotionContainer.Initialize(runState);
+    }
+
+    private static void ClearPotionHolders(Godot.Node container)
+    {
+        var holders = Traverse.Create(container).Field("_holders").GetValue() as IList;
+        if (holders == null) return;
+        foreach (var holder in holders)
+        {
+            var t = Traverse.Create(holder);
+            var potion = t.Field("<Potion>k__BackingField").GetValue() as Godot.Node;
+            if (potion == null) continue;
+            t.Field("<Potion>k__BackingField").SetValue(null);
+            potion.QueueFree();
+        }
     }
 
     private static List<NMultiplayerPlayerState> GetPlayerStateNodes()
