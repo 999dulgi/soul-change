@@ -1,0 +1,27 @@
+<Project Sdk="Godot.NET.Sdk/4.5.1">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="0Harmony">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Slay the Spire 2\data_sts2_windows_x86_64\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="sts2">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Slay the Spire 2\data_sts2_windows_x86_64\sts2.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="DeployToModFolder" AfterTargets="Build">
+    <PropertyGroup>
+      <ModDeployDir>C:\Program Files (x86)\Steam\steamapps\common\Slay the Spire 2\mods\soul-change\</ModDeployDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(ModDeployDir)" />
+    <Copy SourceFiles="$(OutputPath)SoulChange.dll" DestinationFolder="$(ModDeployDir)" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\SoulChange_manifest.json" DestinationFolder="$(ModDeployDir)" />
+    <Message Text="Deployed to $(ModDeployDir)" Importance="high" />
+  </Target>
+</Project>

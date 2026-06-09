@@ -1,0 +1,10 @@
+{
+  "id": "SoulChange",
+  "name": "Soul Change",
+  "author": "999dulgi",
+  "description": "멀티플레이에서 층을 올라갈 때마다 서로의 캐릭터가 바뀌는 모드",
+  "version": "1.0.0",
+  "has_pck": false,
+  "has_dll": true,
+  "affects_gameplay": true
+}
