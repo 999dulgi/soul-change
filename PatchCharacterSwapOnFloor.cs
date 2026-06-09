@@ -57,6 +57,7 @@ public class PatchCharacterSwapOnFloor
         RebindRelicOwners(players);
         RotateField(players, "_gold");
         RotateField(players, "_potionSlots");
+        RebindPotionOwners(players);
         RotateField(players, "<ExtraFields>k__BackingField");
         RotateField(players, "<PlayerRng>k__BackingField");
         RotateField(players, "<PlayerOdds>k__BackingField");
@@ -217,6 +218,20 @@ public class PatchCharacterSwapOnFloor
             if (relics == null) continue;
             foreach (var relic in relics)
                 Traverse.Create(relic).Field("_owner").SetValue(player);
+        }
+    }
+
+    private static void RebindPotionOwners(List<Player> players)
+    {
+        foreach (var player in players)
+        {
+            var potions = Traverse.Create(player).Field("_potionSlots").GetValue() as IList;
+            if (potions == null) continue;
+            foreach (var potion in potions)
+            {
+                if (potion == null) continue;
+                Traverse.Create(potion).Field("_owner").SetValue(player);
+            }
         }
     }
 }
