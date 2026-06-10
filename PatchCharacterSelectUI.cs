@@ -24,7 +24,6 @@ public class PatchCharacterSelectUI
             if (!Godot.GodotObject.IsInstanceValid(__instance)) return;
             if (__instance.FindChild(PanelName, owned: false) != null) return;
 
-            Godot.GD.Print("[SoulChange] 설정 패널 추가");
             var panel = SoulChangeSettingsUi.Build();
             panel.Name = PanelName;
             __instance.AddChild(panel);
@@ -37,7 +36,6 @@ public class PatchCustomRunUI
 {
     static void Postfix(NCustomRunScreen __instance, INetGameService gameService)
     {
-        Godot.GD.Print("[SoulChange] NCustomRunScreen.InitializeMultiplayerAsHost 패치 실행");
         SettingsSync.RegisterHandler(gameService);
         PatchCharacterSelectUI.AddPanelDeferred(__instance);
     }

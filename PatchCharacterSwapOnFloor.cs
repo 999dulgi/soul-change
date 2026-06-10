@@ -55,7 +55,7 @@ public class PatchCharacterSwapOnFloor
             _triggerCount++;
             if (_triggerCount < SoulChangeConfig.SwapEveryNFloors)
             {
-                Log($"[SoulChange] Floor {currentFloor} ({__instance.RoomType}): 트리거 {_triggerCount}/{SoulChangeConfig.SwapEveryNFloors}, 아직 스왑 안 함.");
+                Godot.GD.Print($"[SoulChange] Floor {currentFloor} ({__instance.RoomType}): 트리거 {_triggerCount}/{SoulChangeConfig.SwapEveryNFloors}, 아직 스왑 안 함.");
                 return;
             }
             _triggerCount = 0;
@@ -65,11 +65,11 @@ public class PatchCharacterSwapOnFloor
 
         if (rotateBy == 0)
         {
-            Log($"[SoulChange] Floor {currentFloor} (BOSS): 이미 원래 정렬 상태, 스왑 없음.");
+            Godot.GD.Print($"[SoulChange] Floor {currentFloor} (BOSS): 이미 원래 정렬 상태, 스왑 없음.");
             return;
         }
 
-        Log($"[SoulChange] Floor {currentFloor} ({(isBoss ? "BOSS→원복" : $"SWAP/{__instance.RoomType}")}): rotateBy={rotateBy}. Before: " +
+        Godot.GD.Print($"[SoulChange] Floor {currentFloor} ({(isBoss ? "BOSS→원복" : $"SWAP/{__instance.RoomType}")}): rotateBy={rotateBy}. Before: " +
             string.Join(", ", players.Select((p, i) => $"[{i}]NetId={p.NetId} Char={p.Character?.Id}")));
 
         var playerStateNodes = GetPlayerStateNodes();
@@ -84,56 +84,52 @@ public class PatchCharacterSwapOnFloor
             topBar.Deck._ExitTree();
         }
 
-        for (int r = 0; r < rotateBy; r++)
-            DoRotateAllFields(players);
+        DoRotateAllFields(players, rotateBy);
 
-        var capturedRunState = state;
-        var capturedTopBar = topBar;
-        var capturedNodes = playerStateNodes;
         Godot.Callable.From(() =>
         {
-            foreach (var node in capturedNodes)
+            foreach (var node in playerStateNodes)
             {
                 var healthBar = Traverse.Create(node).Field("_healthBar").GetValue();
                 if (healthBar != null)
                     Traverse.Create(healthBar).Field("_creature").SetValue(null);
                 node._Ready();
             }
-            RefreshRelicInventory(capturedRunState);
-            if (capturedTopBar != null)
-                RefreshTopBar(capturedTopBar, capturedRunState);
+            RefreshRelicInventory(state);
+            if (topBar != null)
+                RefreshTopBar(topBar, state);
         }).CallDeferred();
 
-        Log($"[SoulChange] DONE. After: " +
+        Godot.GD.Print($"[SoulChange] DONE. After: " +
             string.Join(", ", players.Select((p, i) => $"[{i}]NetId={p.NetId} Char={p.Character?.Id}")));
     }
 
-    private static void DoRotateAllFields(IReadOnlyList<Player> players)
+    private static void DoRotateAllFields(IReadOnlyList<Player> players, int rotateBy)
     {
-        RotateField(players, "<Character>k__BackingField");
-        RotateField(players, "<Creature>k__BackingField");
+        RotateField(players, "<Character>k__BackingField", rotateBy);
+        RotateField(players, "<Creature>k__BackingField", rotateBy);
         RebindCreaturePlayers(players);
-        RotateField(players, "<Deck>k__BackingField");
+        RotateField(players, "<Deck>k__BackingField", rotateBy);
         RebindCardOwners(players);
         ResetRunPiles(players);
-        RotateField(players, "_relics");
+        RotateField(players, "_relics", rotateBy);
         RebindRelicOwners(players);
-        RotateField(players, "_gold");
-        RotateField(players, "_potionSlots");
+        RotateField(players, "_gold", rotateBy);
+        RotateField(players, "_potionSlots", rotateBy);
         RebindPotionOwners(players);
-        RotateField(players, "<ExtraFields>k__BackingField");
-        RotateField(players, "<PlayerRng>k__BackingField");
-        RotateField(players, "<PlayerOdds>k__BackingField");
-        RotateField(players, "<RelicGrabBag>k__BackingField");
-        RotatePublic(players, p => p.MaxEnergy, (p, v) => p.MaxEnergy = v);
-        RotatePublic(players, p => p.BaseOrbSlotCount, (p, v) => p.BaseOrbSlotCount = v);
-        RotatePublic(players, p => p.DiscoveredCards, (p, v) => p.DiscoveredCards = v);
-        RotatePublic(players, p => p.DiscoveredRelics, (p, v) => p.DiscoveredRelics = v);
-        RotatePublic(players, p => p.DiscoveredPotions, (p, v) => p.DiscoveredPotions = v);
-        RotatePublic(players, p => p.DiscoveredEnemies, (p, v) => p.DiscoveredEnemies = v);
-        RotatePublic(players, p => p.DiscoveredEpochs, (p, v) => p.DiscoveredEpochs = v);
-        RotateField(players, "<MaxAscensionWhenRunStarted>k__BackingField");
-        RotateField(players, "_canRemovePotions");
+        RotateField(players, "<ExtraFields>k__BackingField", rotateBy);
+        RotateField(players, "<PlayerRng>k__BackingField", rotateBy);
+        RotateField(players, "<PlayerOdds>k__BackingField", rotateBy);
+        RotateField(players, "<RelicGrabBag>k__BackingField", rotateBy);
+        RotatePublic(players, p => p.MaxEnergy, (p, v) => p.MaxEnergy = v, rotateBy);
+        RotatePublic(players, p => p.BaseOrbSlotCount, (p, v) => p.BaseOrbSlotCount = v, rotateBy);
+        RotatePublic(players, p => p.DiscoveredCards, (p, v) => p.DiscoveredCards = v, rotateBy);
+        RotatePublic(players, p => p.DiscoveredRelics, (p, v) => p.DiscoveredRelics = v, rotateBy);
+        RotatePublic(players, p => p.DiscoveredPotions, (p, v) => p.DiscoveredPotions = v, rotateBy);
+        RotatePublic(players, p => p.DiscoveredEnemies, (p, v) => p.DiscoveredEnemies = v, rotateBy);
+        RotatePublic(players, p => p.DiscoveredEpochs, (p, v) => p.DiscoveredEpochs = v, rotateBy);
+        RotateField(players, "<MaxAscensionWhenRunStarted>k__BackingField", rotateBy);
+        RotateField(players, "_canRemovePotions", rotateBy);
     }
 
     private static void RefreshTopBar(NTopBar topBar, RunState runState)
@@ -201,24 +197,21 @@ public class PatchCharacterSwapOnFloor
         inventory.Initialize(runState);
     }
 
-    private static void Log(string msg) => Godot.GD.Print(msg);
-
-    private static void RotateField(IReadOnlyList<Player> players, string field)
+    private static void RotateField(IReadOnlyList<Player> players, string field, int rotateBy)
     {
+        int n = players.Count;
         var traversals = players.Select(p => Traverse.Create(p).Field(field)).ToList();
-        var saved = traversals[0].GetValue();
-        for (int i = 0; i < players.Count - 1; i++)
-            traversals[i].SetValue(traversals[i + 1].GetValue());
-        traversals[^1].SetValue(saved);
+        var values = traversals.Select(t => t.GetValue()).ToList();
+        for (int i = 0; i < n; i++)
+            traversals[i].SetValue(values[(i + rotateBy) % n]);
     }
 
-    private static void RotatePublic<T>(IReadOnlyList<Player> players, Func<Player, T> getter, Action<Player, T> setter)
+    private static void RotatePublic<T>(IReadOnlyList<Player> players, Func<Player, T> getter, Action<Player, T> setter, int rotateBy)
     {
+        int n = players.Count;
         var values = players.Select(getter).ToList();
-        var saved = values[0];
-        for (int i = 0; i < players.Count - 1; i++)
-            setter(players[i], values[i + 1]);
-        setter(players[^1], saved);
+        for (int i = 0; i < n; i++)
+            setter(players[i], values[(i + rotateBy) % n]);
     }
 
     private static void ResetRunPiles(IReadOnlyList<Player> players)

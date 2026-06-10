@@ -21,10 +21,12 @@ public static class SoulChangeConfig
     // 트리거 방을 몇 번 지나야 스왑할지. 1 = 매번, 2 = 2번마다, ...
     public static int SwapEveryNFloors { get; set; } = 1;
 
+    public static int ModVersion { get; set;} = 103;
+
     public static SoulChangeSettingsMessage ToMessage()
     {
         int flags = TriggerRooms.Aggregate(0, (acc, r) => acc | (1 << (int)r));
-        return new SoulChangeSettingsMessage { RestoreOnBoss = RestoreOnBoss, TriggerRoomFlags = flags, SwapEveryNFloors = SwapEveryNFloors };
+        return new SoulChangeSettingsMessage { RestoreOnBoss = RestoreOnBoss, TriggerRoomFlags = flags, SwapEveryNFloors = SwapEveryNFloors, ModVersion = ModVersion };
     }
 
     public static void ApplyMessage(SoulChangeSettingsMessage msg)
