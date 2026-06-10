@@ -63,16 +63,16 @@ public static class SoulChangeSettingsUi
         spinBox.Step = 1;
         spinBox.Value = SoulChangeConfig.SwapEveryNFloors;
         spinBox.CustomMinimumSize = new Vector2(80, 0);
-        spinBox.ValueChanged += (val) => SoulChangeConfig.SwapEveryNFloors = (int)val;
+        spinBox.ValueChanged += (val) => { SoulChangeConfig.SwapEveryNFloors = (int)val; SettingsSync.OnSettingsRequested(default); };
         nFloorRow.AddChild(spinBox);
         vbox.AddChild(nFloorRow);
 
         AddSeparator(vbox);
 
         var restoreCb = new CheckBox();
-        restoreCb.Text = T("보스방 원복", "Restore on Boss");
+        restoreCb.Text = T("보스 진입시 원래 캐릭터로 복구", "Restore on Boss");
         restoreCb.ButtonPressed = SoulChangeConfig.RestoreOnBoss;
-        restoreCb.Toggled += (pressed) => SoulChangeConfig.RestoreOnBoss = pressed;
+        restoreCb.Toggled += (pressed) => { SoulChangeConfig.RestoreOnBoss = pressed; SettingsSync.OnSettingsRequested(default); };
         vbox.AddChild(restoreCb);
 
         return container;
@@ -109,6 +109,7 @@ public static class SoulChangeSettingsUi
                 SoulChangeConfig.TriggerRooms.Add(roomType);
             else
                 SoulChangeConfig.TriggerRooms.Remove(roomType);
+            SettingsSync.OnSettingsRequested(default);
         };
         parent.AddChild(cb);
     }
