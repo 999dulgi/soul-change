@@ -1,5 +1,7 @@
 using HarmonyLib;
+using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
+using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.Screens.CharacterSelect;
 using MegaCrit.Sts2.Core.Nodes.Screens.CustomRun;
 
@@ -57,6 +59,21 @@ internal static class SettingsSync
 
     internal static void OnSettingsReceived(SoulChangeSettingsMessage msg, ulong _)
     {
+        if (msg.ModVersion != SoulChangeConfig.ModVersion)
+        {
+            Godot.GD.Print($"[SoulChange] 버전 불일치: 호스트={msg.ModVersion}, 클라이언트={SoulChangeConfig.ModVersion}");
+            bool isKorean = LocManager.Instance?.Language == "kor";
+            var popup = NErrorPopup.Create(
+                isKorean ? "Soul Change - 버전 불일치" : "Soul Change - Version Mismatch",
+                isKorean
+                    ? $"호스트의 Soul Change 버전({msg.ModVersion})과\n클라이언트의 버전({SoulChangeConfig.ModVersion})이 다릅니다.\n모드를 동일한 버전으로 업데이트해주세요."
+                    : $"Host's Soul Change version ({msg.ModVersion}) does not match\nclient's version ({SoulChangeConfig.ModVersion}).\nPlease update the mod to the same version.",
+                showReportBugButton: false
+            );
+            if (popup != null)
+                NModalContainer.Instance.Add(popup);
+            return;
+        }
         SoulChangeConfig.ApplyMessage(msg);
         Godot.GD.Print($"[SoulChange] 클라이언트: 설정 수신 완료. RestoreOnBoss={msg.RestoreOnBoss}, TriggerRoomFlags={msg.TriggerRoomFlags}, SwapEveryNFloors={msg.SwapEveryNFloors}");
     }
